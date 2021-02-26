@@ -1,30 +1,22 @@
 //Sensors
-//TemperatureSensor Set Arduino variable to set ADAFRuit correctly
-#include <Adafruit_MCP9808.h>
-//Pressure,Humidity
-#include <Adafruit_BME280.h>
-//Accelerometer from the Nano, modified library from Arduino
-#include "LSM6DS3.h"
-//Magnetic Fields
-#include "ALS31300.h"
+#include <Adafruit_MCP9808.h> // Temperature sensor
+#include <Adafruit_BME280.h> // Temperature, pressure, humidity
+#include "LSM6DS3.h" // Accelerometer from the Nano, modified library from Arduino
+#include "ALS31300.h" // Magnetic Fields
 
-//I2C
-#include <Wire.h>
-//RealTimeClock
-#include <RTCZero.h>
-//NTP updating the time
-#include <NTPClient.h>
-//Network Seetings
-#include "NetworkSettings.h"
-//Wifi
-#include <WiFiNINA.h>
-#include <WiFiUDP.h>
-//DataObject
+#include <Wire.h> // I2C
+#include <RTCZero.h> // RealTimeClock
+#include <NTPClient.h> // NTP updating the time
+#include "NetworkSettings.h" // Network Seetings
+#include <WiFiNINA.h> // Wifi
+#include <WiFiUDP.h> // DataObject
 #include "DataObject.h"
 #include "InfluxDBConnection.h"
 
 // Include watchdog library for resetting Arduino in case of endless loops or other problems
-//#include <avr/wdt.h>
+#include <Adafruit_SleepyDog.h>
+
+
 
 Adafruit_BME280 bme;
 Adafruit_MCP9808 tempsensor;
@@ -54,7 +46,16 @@ RTCZero rtc;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
 
+int watchdog_countdown = 0;
 
+bool reset_watchdog = true; // As long as this variable is true, the watchdog will regularly be resetted. If this variable is set to false, the watchdog is not resetted or disabled anymore and by latest after 16 seconds, the Arduino will be completely reset
+
+// Sometimes it happens that the connection to InfluxDB is working well but the sensor just deliver stranges value (e.g. humidity = 100% and temperature of -150°C). 
+// Here we define lower and upper limits for some variables. If the value of one sensor does not lie within these expected boundaries, the Arduino will be restarted (with a Watchdog)
+float upper_limit_humidity_before_reset = 95;
+float lower_limit_humidity_before_reset = 1;
+float upper_limit_temperature_before_reset = 40;
+float lower_limit_temperature_before_reset = 0;
 
 
 void setup_wifi(){
@@ -152,30 +153,37 @@ void setup() {
     Serial.println("LSM6DS3 (acceleration): Error with setup!");
   }
   
+  watchdog_countdown = Watchdog.enable(16000); // More than 16 seconds is not possible.
+  Serial.println("Watchdog enabled for 16 seconds.");
   Serial.println("Setup complete\n");
 }
 
 void loop() {
+  Watchdog.reset(); // Reset Watchdog
+  reset_watchdog = true;
   
   millisec = millis();
+  
   // update temperature,pressure and humidity values if {millitempupdate} milliseconds have passed
   if(millisec-prevMillis >= millitempupdate){
+    float valt = 0;
+    float valh = 0;
+    float valt2 = 0;
+    float valp = 0;
+    float x,y,z;
     if(tempValid){
-      float val = tempsensor.readTempC();
-      Data.LogTemp(val);
+      valt = tempsensor.readTempC();
+      Data.LogTemp(valt);
       //Serial.print("Temperature:");
-      //Serial.println(val);
+      //Serial.println(valt);
     }
     if(bmeValid){
-      float valh;
       valh = bme.readHumidity();
       Data.LogHum(valh);
       //Serial.print("Humidity:");
       //Serial.println(valh);
-      float valt2;
       valt2 = bme.readTemperature();
       Data.LogTemp2(valt2);
-      float valp;
       valp = bme.readPressure();
       Data.LogPres(valp);
       //Serial.print("Pressure:");
@@ -183,18 +191,17 @@ void loop() {
     }
     if(magValid){
       auto value = Mag.readFullLoop();
-      Serial.print("\r\n Magnetic Field:");
-      Serial.print(value.mx);
-      Serial.print(",");
-      Serial.print(value.my);
-      Serial.print(",");
-      Serial.println(value.mz);
+      //Serial.print("\r\n Magnetic Field:");
+      //Serial.print(value.mx);
+      //Serial.print(",");
+      //Serial.print(value.my);
+      //Serial.print(",");
+      //Serial.println(value.mz);
       Data.LogMagField(value.mx,value.my,value.mz);
     }
     //get accelerometer data
     if(imuValid && IMU.accelerationAvailable()){
-      float x,y,z;
-      auto value = IMU.readAcceleration(x,y,z);
+      auto value_IMU = IMU.readAcceleration(x,y,z);
       //Serial.print("\r\n Acceleration:");
       //Serial.print(x);
       //Serial.print(",");
@@ -205,21 +212,49 @@ void loop() {
     }
     //set current Millis
     prevMillis=millisec;
-  }
 
+
+
+    // Check if the lab temperature is in a valid range
+    if(valt > upper_limit_temperature_before_reset || valt < lower_limit_temperature_before_reset){
+      reset_watchdog = false;
+    }
+    // Check if the humidity is in a valid range
+    if(valh > upper_limit_humidity_before_reset || valh < lower_limit_humidity_before_reset){
+      reset_watchdog = false;
+    }
+
+    // Otherwise, if one of the sensors does not seem to work, restart the Arduino (set a very short Watchdog)
+    if(!reset_watchdog){
+      Serial.println("One of the sensors seems to be wrong. Reset Arduino!");
+      Watchdog.disable(); // First disable old watchdog
+      int watchdog_immediately = Watchdog.enable(500); // Now set a new watchdog with a much shorter time
+      delay(1000);
+    }
+  }
 
 
   // Writing data to InfluxDB
   int newseconds = rtc.getSeconds();
   //save whenever clock is at 0 in the last digit, only save once
+
+  Watchdog.reset(); // Reset Watchdog
+
+  
   if(!(newseconds%10) && lastsavedseconds != newseconds){
-    // Serial.println(Data.getMeasurements("\n")); // Shouldn't be done, otherwise data will be deleted!
     lastsavedseconds = newseconds;
     bool success = false;
     unsigned int counter_trials_connection = 0; // Counts how often it is tried to set up the connection
     Serial.println("\nSending data to database");
     digitalWrite(13,HIGH);
-    while(!success){ // Sometimes, the connection does not immediately work, so it will be repeatedly done until it works
+    
+    while(!success){ // Sometimes, the connection does not immediately work, so it will be repeatedly tried until it works
+      if(reset_watchdog){
+        Watchdog.reset(); // Reset Watchdog
+      }
+
+      Serial.println("Try connecting to database");
+      // This is the time critical part. Therefore we do a reset of the watchdog before and after the following function call
       success = DBConn.writeToDataBase(Data);
       if(success){
         Serial.println("Data successfully written to InfluxDB!");
@@ -228,6 +263,11 @@ void loop() {
       else{
         Serial.println("Connection failed");
       }
+      
+      if(reset_watchdog){
+        Watchdog.reset(); // Reset Watchdog
+      }
+      
       ++counter_trials_connection;
       if(counter_trials_connection >= 2){ // After trying twice unsuccessfully to connect to InfluxDB, reset WiFi
         Serial.println("Try to reconnect to WiFi");
@@ -235,12 +275,9 @@ void loop() {
         WiFi.end();
         setup_wifi();
       }
-      if(counter_trials_connection >= 4){ // After 4 unsuccessful trials, reset complete Arduino
-        Serial.println("Reset Arduino");
-        //software_Reset(); // Reset Arduino
-        // If the reset correctly works, the following should never be executed!
-        counter_trials_connection = 0;
-        Serial.println("This should never be printed.");
+      if(counter_trials_connection >= 4){
+        Serial.println("Stop resetting the watchdog and let it reset the Arduino.");
+        reset_watchdog = false; // Don't reset the watchdog anymore and thus let the Arduino be reset soon by the Watchdog
       }
     }
     digitalWrite(13,LOW);
@@ -252,4 +289,4 @@ void loop() {
 void SyncRTC(){
     timeClient.forceUpdate();
     rtc.setEpoch(timeClient.getEpochTime());
- }
+}
