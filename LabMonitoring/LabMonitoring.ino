@@ -31,9 +31,11 @@ const unsigned int databaseinterval = 5;
 //updateinterval for the sensors (ms)
 const unsigned long millitempupdate = 100; //500
 const unsigned long millimagupdate = 100;
+const unsigned long send_data_time_interval = 10000; // Send data every 10 seconds
 //some large number that the loop starts immediately
 unsigned long prevMillis = (unsigned long)0xFFFFFFFFFFFFFFF;
 unsigned long millisec = 0;
+unsigned long prev_millis_sent_data = (unsigned long)0xFFFFFFFFFFFFFFF;
 DataObject Data;
 int lastsavedseconds = -1;
 //validity of sensors
@@ -56,6 +58,11 @@ float upper_limit_humidity_before_reset = 95;
 float lower_limit_humidity_before_reset = 1;
 float upper_limit_temperature_before_reset = 40;
 float lower_limit_temperature_before_reset = 0;
+float upper_limit_acceleration_before_reset = 20;
+float lower_limit_acceleration_before_reset = 0.01;
+
+
+bool arduino_just_resetted = true; // This stores if the Arduino was just resetted, i.e. connects to the database for the first time. This parameter is sent to the database as well to track how often the boards reset (to see which ones are more reliable than others)
 
 
 void setup_wifi(){
@@ -170,7 +177,8 @@ void loop() {
     float valh = 0;
     float valt2 = 0;
     float valp = 0;
-    float x,y,z;
+    float acceleration_x, acceleration_y, acceleration_z;
+    float acceleration_abs_value = 0;
     if(tempValid){
       valt = tempsensor.readTempC();
       Data.LogTemp(valt);
@@ -201,14 +209,15 @@ void loop() {
     }
     //get accelerometer data
     if(imuValid && IMU.accelerationAvailable()){
-      auto value_IMU = IMU.readAcceleration(x,y,z);
+      auto value_IMU = IMU.readAcceleration(acceleration_x, acceleration_y, acceleration_z);
       //Serial.print("\r\n Acceleration:");
-      //Serial.print(x);
+      //Serial.print(acceleration_x);
       //Serial.print(",");
-      //Serial.print(y);
+      //Serial.print(acceleration_y);
       //Serial.print(",");
-      //Serial.println(z);
-      Data.LogAcc(x,y,z);
+      //Serial.println(acceleration_z);
+      Data.LogAcc(acceleration_x, acceleration_y, acceleration_z);
+      acceleration_abs_value = sqrt(acceleration_x*acceleration_x + acceleration_y*acceleration_y + acceleration_z*acceleration_z);
     }
     //set current Millis
     prevMillis=millisec;
@@ -221,6 +230,10 @@ void loop() {
     }
     // Check if the humidity is in a valid range
     if(valh > upper_limit_humidity_before_reset || valh < lower_limit_humidity_before_reset){
+      reset_watchdog = false;
+    }
+    // Check if the acceleration is in a valid range
+    if(acceleration_abs_value > upper_limit_acceleration_before_reset || acceleration_abs_value < lower_limit_acceleration_before_reset){
       reset_watchdog = false;
     }
 
@@ -240,8 +253,13 @@ void loop() {
 
   Watchdog.reset(); // Reset Watchdog
 
-  
-  if(!(newseconds%10) && lastsavedseconds != newseconds){
+
+  bool rtc_did_not_work_send_data_to_late = millisec - prev_millis_sent_data >= send_data_time_interval + 10000;
+  if(
+    (!(newseconds%10) && lastsavedseconds != newseconds)
+    || rtc_did_not_work_send_data_to_late
+  ){
+    prev_millis_sent_data = millisec;
     lastsavedseconds = newseconds;
     bool success = false;
     unsigned int counter_trials_connection = 0; // Counts how often it is tried to set up the connection
@@ -255,9 +273,10 @@ void loop() {
 
       Serial.println("Try connecting to database");
       // This is the time critical part. Therefore we do a reset of the watchdog before and after the following function call
-      success = DBConn.writeToDataBase(Data);
+      success = DBConn.writeToDataBase(Data, arduino_just_resetted, rtc_did_not_work_send_data_to_late);
       if(success){
         Serial.println("Data successfully written to InfluxDB!");
+        arduino_just_resetted = false;
         break;
       }
       else{

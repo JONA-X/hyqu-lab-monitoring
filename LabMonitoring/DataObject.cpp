@@ -42,7 +42,7 @@ void DataObject::LogMagField(float x,float y, float z){
 
 
 //Gets measurement and resets the class
-String DataObject::getMeasurements(String separator){
+String DataObject::getMeasurements(String separator, bool arduino_just_resetted, bool rtc_did_not_work_send_data_to_late){
     String sensorname = SENSORNAME;
     String retstring =  "Temperature,sensor=" + sensorname + ",sensorPCB=MCP9808 value=" + String(Temperature) + separator +
                         "Temperature,sensor=" + sensorname + ",sensorPCB=BME280 value=" + String(Temperature2) + separator + 
@@ -51,6 +51,12 @@ String DataObject::getMeasurements(String separator){
                         "Acceleration,sensor=" + sensorname + " Max=" + String(MaxAcc) + ",Avg=" + String(AvgAcc) + separator +
                         "MagField,sensor=" + sensorname + " abs=" + String(MaxMagAbsField) + ",x_max=" + String(MaxMagField[0]) + ",y_max=" + String(MaxMagField[1])+ ",z_max=" + String(MaxMagField[2]) + 
                         ",x_avg=" + String(AvgMagField[0]) + ",y_avg=" + String(AvgMagField[1])+ ",z_avg=" + String(AvgMagField[2]);
+    if(arduino_just_resetted){
+      retstring += separator + "Reset,sensor=" + sensorname + " value=1";
+    }
+    if(rtc_did_not_work_send_data_to_late){
+      retstring += separator + "RTCNotWorking,sensor=" + sensorname + " value=1";
+    }
     return retstring;
 }
 

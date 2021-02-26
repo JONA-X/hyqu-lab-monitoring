@@ -8,7 +8,7 @@ class InfluxDBConnection : public DataBaseConnection {
 public:
   InfluxDBConnection(String adress, String dbName, String username, String password);
   InfluxDBConnection(String adress, String dbName, String accessToken);
-  virtual bool writeToDataBase(DataObject &Data) override;
+  virtual bool writeToDataBase(DataObject &Data, bool arduino_just_resetted, bool rtc_did_not_work_send_data_to_late) override;
 private:
   WiFiClient client;
   String adress;

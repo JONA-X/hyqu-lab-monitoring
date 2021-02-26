@@ -13,7 +13,7 @@ InfluxDBConnection::InfluxDBConnection(String adress, String dbName, String acce
         dataBaseString = "POST /write?db=" + dbName + "&precision=s&b=" + accessToken + " HTTP/1.1";
     }
 
-bool InfluxDBConnection::writeToDataBase(DataObject &Data){
+bool InfluxDBConnection::writeToDataBase(DataObject &Data, bool arduino_just_resetted, bool rtc_did_not_work_send_data_to_late){
     //change to connectSSL if necessary
     if(client.connect(adress.c_str(),port)){
         //clones a HTTP post request
@@ -22,7 +22,7 @@ bool InfluxDBConnection::writeToDataBase(DataObject &Data){
         client.println("Connection: close"); //connection closes after request finished
         client.println("User-Agent: Arduino/1.0"); // "Browser"
         client.print("Content-Length: ");
-        String DataString = Data.getMeasurements("\n");
+        String DataString = Data.getMeasurements("\n", arduino_just_resetted, rtc_did_not_work_send_data_to_late);
         client.println(DataString.length());
         Serial.println("");
         Serial.println(DataString);

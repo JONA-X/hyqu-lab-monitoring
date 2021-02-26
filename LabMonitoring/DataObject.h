@@ -11,7 +11,7 @@ public:
   void LogHum(float value);
   void LogAcc(float x,float y,float z);
   void LogMagField(float x,float y,float z);
-  String getMeasurements(String separator);
+  String getMeasurements(String separator, bool arduino_just_resetted, bool rtc_did_not_work_send_data_to_late);
   void Reset();
 private:
   float Temperature = 0;
