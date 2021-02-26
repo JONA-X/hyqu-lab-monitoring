@@ -6,3 +6,6 @@
 #define INFLUXDBNAME "<PASSWORD>"
 #define INFLUXUSERNAME "<USERNAME>"
 #define INFLUXDBPASSWORD "<PASSWORD>"
+
+#define REMOTE_RESET_SERVER "example.com"
+#define REMOTE_RESET_SERVER_URL "arduino_should_reset/check.php"

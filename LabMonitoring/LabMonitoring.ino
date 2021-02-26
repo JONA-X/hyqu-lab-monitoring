@@ -51,6 +51,7 @@ NTPClient timeClient(ntpUDP);
 int watchdog_countdown = 0;
 
 bool reset_watchdog = true; // As long as this variable is true, the watchdog will regularly be resetted. If this variable is set to false, the watchdog is not resetted or disabled anymore and by latest after 16 seconds, the Arduino will be completely reset
+bool reset_watchdog_override_remotely = false;
 
 // Sometimes it happens that the connection to InfluxDB is working well but the sensor just deliver stranges value (e.g. humidity = 100% and temperature of -150°C). 
 // Here we define lower and upper limits for some variables. If the value of one sensor does not lie within these expected boundaries, the Arduino will be restarted (with a Watchdog)
@@ -63,6 +64,22 @@ float lower_limit_acceleration_before_reset = 0.01;
 
 
 bool arduino_just_resetted = true; // This stores if the Arduino was just resetted, i.e. connects to the database for the first time. This parameter is sent to the database as well to track how often the boards reset (to see which ones are more reliable than others)
+#include <ArduinoHttpClient.h>
+WiFiClient wifi_client;
+HttpClient client_server_reset = HttpClient(wifi_client, REMOTE_RESET_SERVER, 80);
+
+
+void check_and_reset_watchdog(){
+  if(reset_watchdog && !reset_watchdog_override_remotely){
+    Watchdog.reset(); // Reset Watchdog
+  }
+}
+void do_immediate_restart(){
+  Serial.println("Restart Arduino immediately");
+  Watchdog.disable(); // First disable old watchdog
+  int watchdog_immediately = Watchdog.enable(100); // Now set a new watchdog with a much shorter time
+  delay(200);
+}
 
 
 void setup_wifi(){
@@ -87,6 +104,35 @@ void setup_wifi(){
   Serial.print("Connected to ");
   Serial.println(NETWORKSSID);
 }
+
+
+void check_server_for_remote_reset(){
+
+  String url = REMOTE_RESET_SERVER_URL;
+  String sensorname = SENSORNAME;
+
+  Serial.println("Request at server if the Arduino should be reset");
+
+
+  String httpRequestData = "sensor=" + sensorname;
+  String contentType = "application/x-www-form-urlencoded";
+  String postData = httpRequestData;
+  
+  client_server_reset.post("/" + url + "?", contentType, postData);
+  int statusCode = client_server_reset.responseStatusCode();
+  String response = client_server_reset.responseBody();
+  Serial.print("Response: ");
+  Serial.println(response);
+
+  if(response == "true"){
+    reset_watchdog_override_remotely = true;
+    do_immediate_restart(); // Better: restart immediately
+  }
+  else {
+    reset_watchdog_override_remotely = false;
+  }
+}
+
 
 
 void setup() {
@@ -166,8 +212,8 @@ void setup() {
 }
 
 void loop() {
-  Watchdog.reset(); // Reset Watchdog
   reset_watchdog = true;
+  check_and_reset_watchdog(); // Reset Watchdog
   
   millisec = millis();
   
@@ -240,9 +286,7 @@ void loop() {
     // Otherwise, if one of the sensors does not seem to work, restart the Arduino (set a very short Watchdog)
     if(!reset_watchdog){
       Serial.println("One of the sensors seems to be wrong. Reset Arduino!");
-      Watchdog.disable(); // First disable old watchdog
-      int watchdog_immediately = Watchdog.enable(500); // Now set a new watchdog with a much shorter time
-      delay(1000);
+      do_immediate_restart();
     }
   }
 
@@ -251,7 +295,7 @@ void loop() {
   int newseconds = rtc.getSeconds();
   //save whenever clock is at 0 in the last digit, only save once
 
-  Watchdog.reset(); // Reset Watchdog
+  check_and_reset_watchdog(); // Reset Watchdog
 
 
   bool rtc_did_not_work_send_data_to_late = millisec - prev_millis_sent_data >= send_data_time_interval + 10000;
@@ -259,6 +303,8 @@ void loop() {
     (!(newseconds%10) && lastsavedseconds != newseconds)
     || rtc_did_not_work_send_data_to_late
   ){
+    check_server_for_remote_reset();
+    
     prev_millis_sent_data = millisec;
     lastsavedseconds = newseconds;
     bool success = false;
@@ -267,9 +313,7 @@ void loop() {
     digitalWrite(13,HIGH);
     
     while(!success){ // Sometimes, the connection does not immediately work, so it will be repeatedly tried until it works
-      if(reset_watchdog){
-        Watchdog.reset(); // Reset Watchdog
-      }
+      check_and_reset_watchdog(); // Reset Watchdog
 
       Serial.println("Try connecting to database");
       // This is the time critical part. Therefore we do a reset of the watchdog before and after the following function call
@@ -283,9 +327,7 @@ void loop() {
         Serial.println("Connection failed");
       }
       
-      if(reset_watchdog){
-        Watchdog.reset(); // Reset Watchdog
-      }
+      check_and_reset_watchdog(); // Reset Watchdog
       
       ++counter_trials_connection;
       if(counter_trials_connection >= 2){ // After trying twice unsuccessfully to connect to InfluxDB, reset WiFi
