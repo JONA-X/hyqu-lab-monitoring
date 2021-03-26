@@ -29,7 +29,7 @@ ALS31300 Mag(96);
 const unsigned int databaseinterval = 5;
 //origin 10
 //updateinterval for the sensors (ms)
-const unsigned long millitempupdate = 100; //500
+const unsigned long millitempupdate = 20; //500
 const unsigned long millimagupdate = 100;
 const unsigned long send_data_time_interval = 10000; // Send data every 10 seconds
 //some large number that the loop starts immediately
@@ -100,7 +100,6 @@ void setup_wifi(){
     delay(1000);
   }
   WiFi.lowPowerMode();
-  digitalWrite(13,LOW);
   Serial.print("Connected to ");
   Serial.println(NETWORKSSID);
 }
@@ -141,7 +140,12 @@ void setup() {
   digitalWrite(13, LOW);
   Serial.begin(9600);
 
+  watchdog_countdown = Watchdog.enable(16000); // More than 16 seconds is not possible.
+  Serial.println("Watchdog enabled for 16 seconds.");
+  
+  check_and_reset_watchdog(); // Reset Watchdog
   setup_wifi();
+  check_and_reset_watchdog(); // Reset Watchdog
 
   
   //Alarm at 2 AM to set the clock
@@ -154,6 +158,9 @@ void setup() {
   rtc.setAlarmTime(2,0,0);
   rtc.enableAlarm(RTCZero::Alarm_Match::MATCH_HHMMSS);
   rtc.attachInterrupt(SyncRTC);
+  
+  check_and_reset_watchdog(); // Reset Watchdog
+  
   Serial.print("Time: ");
   Serial.print(rtc.getHours());
   Serial.print(":");
@@ -206,8 +213,7 @@ void setup() {
     Serial.println("LSM6DS3 (acceleration): Error with setup!");
   }
   
-  watchdog_countdown = Watchdog.enable(16000); // More than 16 seconds is not possible.
-  Serial.println("Watchdog enabled for 16 seconds.");
+  check_and_reset_watchdog(); // Reset Watchdog
   Serial.println("Setup complete\n");
 }
 
@@ -310,6 +316,9 @@ void loop() {
     bool success = false;
     unsigned int counter_trials_connection = 0; // Counts how often it is tried to set up the connection
     Serial.println("\nSending data to database");
+    Serial.print("Software version: ");
+    Serial.print(SOFTWARE_VERSION);
+    Serial.println("");
     digitalWrite(13,HIGH);
     
     while(!success){ // Sometimes, the connection does not immediately work, so it will be repeatedly tried until it works
@@ -344,7 +353,6 @@ void loop() {
     digitalWrite(13,LOW);
   }
   
-  delay(5);
 }
 
 void SyncRTC(){
