@@ -41,7 +41,7 @@ private:
   String should_be_reset;
   bool reset_watchdog_override_remotely;
   bool should_be_reset_soon = false;
-  int watchdog_countdown = 0;
+  
 
   // Data storage:
   float Temperature = 0;

@@ -56,6 +56,7 @@ bool magValid;
 bool imuValid;
 
 
+int watchdog_countdown = 0;
 bool reset_watchdog = true; // As long as this variable is true, the watchdog will regularly be resetted. If this variable is set to false, the watchdog is not resetted or disabled anymore and by latest after 16 seconds, the Arduino will be completely reset
 
 
@@ -73,7 +74,8 @@ bool arduino_just_resetted = true; // This stores if the Arduino was just resett
 
 bool send_additional_debug_data = true; // Should send more debug info to InfluxDB at next connection?
 
-
+/*
+*/
 
 
 
@@ -83,6 +85,9 @@ void setup() {
   digitalWrite(13, LOW);
   Serial.begin(9600);
 
+
+  watchdog_countdown = Watchdog.enable(16000); // More than 16 seconds is not possible.
+  Serial.println("Watchdog enabled for 16 seconds.");
   
   
   SensorBoard_obj.check_and_reset_watchdog(); // Reset Watchdog
@@ -157,12 +162,16 @@ void setup() {
   }
   
   SensorBoard_obj.check_and_reset_watchdog(); // Reset Watchdog
+  /*
+  */
+  delay(3000);
   Serial.println("Setup complete\n");
 }
 
 
 
 void loop() {
+  
   reset_watchdog = true;
   SensorBoard_obj.check_and_reset_watchdog(); // Reset Watchdog
   
@@ -290,6 +299,7 @@ void loop() {
   }
   
 }
+
 
 void SyncRTC(){
     timeClient.forceUpdate();

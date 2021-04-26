@@ -9,9 +9,6 @@ SensorBoard::SensorBoard(NetworkFunctions NetworkFunctions_object) : NetworkFunc
   sensorname = SENSORNAME;
   server_path = REMOTE_WEBINTERFACE_URL;
   software_version = SOFTWARE_VERSION;
-
-  watchdog_countdown = Watchdog.enable(16000); // More than 16 seconds is not possible.
-  Serial.println("Watchdog enabled for 16 seconds.");
 }
 
 
@@ -124,6 +121,7 @@ void SensorBoard::do_immediate_restart(){
   /*
   // The following is a nice solution but it can also cause problems. Watchdogs on very small timescales can prevent uploading new code if the old watchdog is not overwritten.
   // So instead, just mark here in a variable that the Arduino should be reset and due to this variable, the watchdog wont be reset and the Arduino resets itself after max. 16s automatically. --> No need for a new shorter watchdog
+  // In theory, this should also work. So if there is a need for an IMMEDIATE reset, this could can commented out again
   Serial.println("Restart Arduino immediately");
   Watchdog.disable(); // First disable old watchdog
   int watchdog_immediately = Watchdog.enable(100); // Now set a new watchdog with a much shorter time
@@ -177,12 +175,12 @@ void SensorBoard::LogMagField(float x,float y, float z){
 //Gets measurement and resets the class
 String SensorBoard::getMeasurements(String separator, bool arduino_just_resetted = false, bool rtc_did_not_work_send_data_to_late = false, bool send_additional_debug_data = false){
     String sensorname = SENSORNAME;
-    String retstring =  "Temperature,sensor=" + sensorname  + ",room=" + room + ",location=" + location + ",sensorPCB=MCP9808 value=" + String(Temperature) + separator +
-                        "Temperature,sensor=" + sensorname  + ",room=" + room + ",location=" + location + ",sensorPCB=BME280 value=" + String(Temperature2) + separator + 
-                        "Pressure,sensor=" + sensorname  + ",room=" + room + ",location=" + location + " value=" + String(Pressure) + separator +
-                        "Humidity,sensor=" + sensorname  + ",room=" + room + ",location=" + location + " value=" + String(Humidity) + separator +
-                        "Acceleration,sensor=" + sensorname  + ",room=" + room + ",location=" + location + " Max=" + String(MaxAcc) + ",Avg=" + String(AvgAcc) + separator +
-                        "MagField,sensor=" + sensorname  + ",room=" + room + ",location=" + location + " abs=" + String(MaxMagAbsField) + ",x_max=" + String(MaxMagField[0]) + ",y_max=" + String(MaxMagField[1])+ ",z_max=" + String(MaxMagField[2]) + 
+    String retstring =  "Temperature,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\",sensorPCB=MCP9808 value=" + String(Temperature) + separator +
+                        "Temperature,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\",sensorPCB=BME280 value=" + String(Temperature2) + separator + 
+                        "Pressure,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\" value=" + String(Pressure) + separator +
+                        "Humidity,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\" value=" + String(Humidity) + separator +
+                        "Acceleration,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\" Max=" + String(MaxAcc) + ",Avg=" + String(AvgAcc) + separator +
+                        "MagField,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\" abs=" + String(MaxMagAbsField) + ",x_max=" + String(MaxMagField[0]) + ",y_max=" + String(MaxMagField[1])+ ",z_max=" + String(MaxMagField[2]) + 
                         ",x_avg=" + String(AvgMagField[0]) + ",y_avg=" + String(AvgMagField[1])+ ",z_avg=" + String(AvgMagField[2]);
     if(arduino_just_resetted){
       retstring += separator + "Reset,sensor=" + sensorname + " value=1";
