@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Mon Mar 22 17:26:53 2021
-
-@author: Jonathan Knoll <jknoll@phys.ethz.ch>
-"""
 import numpy as np
 import matplotlib.pyplot as plt
 import csv
