@@ -8,7 +8,10 @@ void NetworkFunctions::setup_wifi(){
   //Comment if WPA2, Uncomment for WPA2 enterprise
   //WiFi.beginEnterprise(NETWORKSSID,USERNAME,PASSWORD);
   //Uncomment if WPA2, comment for WPA2 enterprise
-  WiFi.begin(NETWORKSSID,PASSWORD);
+  
+  unsigned long time_start_connecting = millis();
+  
+  WiFi.begin(NETWORKSSID, PASSWORD);
   while(WiFi.status() != WL_CONNECTED){
     Serial.println("Waiting for connection");
     if(WiFi.status() == 6){
@@ -16,7 +19,17 @@ void NetworkFunctions::setup_wifi(){
       delay(1000);
       WiFi.begin(NETWORKSSID,PASSWORD);
     }
-    //Serial.println(WiFi.status());
+    
+
+    // If Arduino wasn't able to connect to WiFi within 6 seconds, abort the try and start a new try
+    if(millis() - time_start_connecting > 6000){
+      Serial.println("");
+      Serial.print(F("Unable to connect to network. Starting a new try."));
+      time_start_connecting = millis();
+      WiFi.disconnect();
+      WiFi.begin(NETWORKSSID, PASSWORD); 
+    }
+    
     delay(1000);
   }
   WiFi.lowPowerMode();
@@ -83,9 +96,6 @@ String NetworkFunctions::get_return_from_post_request(char* hostname, String ser
     //Serial.println(html_message);
     // the server's disconnected, stop the client:
     client.stop();
-
-    //Serial.println("disconnected");
-
     return html_message;
   } else {// if not connected:
     Serial.println("connection failed");

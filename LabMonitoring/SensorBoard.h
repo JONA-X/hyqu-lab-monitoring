@@ -45,20 +45,20 @@ private:
 
   // Data storage:
   float Temperature = 0;
-  unsigned int TDataPoints;
+  unsigned int TDataPoints = 0;
   float Temperature2 = 0;
-  unsigned int T2DataPoints;
+  unsigned int T2DataPoints = 0;
   float Pressure = 0;
-  unsigned int PDataPoints;
+  unsigned int PDataPoints = 0;
   float Humidity = 0;
-  unsigned int HDataPoints;
+  unsigned int HDataPoints = 0;
   float AvgAcc = 0;
   float MaxAcc = 0;
-  unsigned int ADataPoints;
+  unsigned int ADataPoints = 0;
   float AvgMagField[3] = {0,0,0};
   float MaxMagField[3] = {0,0,0};
   float MaxMagAbsField = 0;
-  unsigned int MDataPoints;
+  unsigned int MDataPoints = 0;
 };
 
 #endif

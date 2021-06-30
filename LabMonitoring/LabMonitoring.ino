@@ -2,7 +2,7 @@
 #include <Adafruit_MCP9808.h> // Temperature sensor
 #include <Adafruit_BME280.h> // Temperature, pressure, humidity
 #include "LSM6DS3.h" // Accelerometer from the Nano, modified library from Arduino
-#include "ALS31300.h" // Magnetic Fields
+#include "ALS31300.h" // Magnetic Field
 
 // Other libraries
 #include <Wire.h> // I2C
@@ -13,41 +13,15 @@
 #include <Adafruit_SleepyDog.h> // Include watchdog library for resetting Arduino in case of endless loops or other problems
 
 // Own files
-#include "NetworkSettings.h" // Network Seetings
-#include "NetworkFunctions.h"
-#include "InfluxDBConnection.h"
-#include "SensorBoard.h"
+#include "NetworkSettings.h" // Network settings
+#include "NetworkFunctions.h" // Network helper functions (connect to WiFi and make POST requests)
+#include "InfluxDBConnection.h" // Makes POST request to InfluxDB for sending the measurement data
+#include "SensorBoard.h" // Class for storing the measurement data, creating InfluxDB line protocol and requesting board information (room, location, resetting)
 
-
-
+// Sensor objects
 Adafruit_BME280 bme;
 Adafruit_MCP9808 tempsensor;
 ALS31300 Mag(96); // Adress according to Wiring and Spec Sheet
-
-InfluxDBConnection DBConn = InfluxDBConnection(INFLUXDBADRESS,INFLUXDBNAME,INFLUXUSERNAME,INFLUXDBPASSWORD);
-
-RTCZero rtc;
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP);
-
-WiFiClient wifi_client;
-
-NetworkFunctions NetworkFunctions_object;
-SensorBoard SensorBoard_obj(NetworkFunctions_object);
-
-
-
-
-// Time intervals
-const unsigned long update_interval_for_sensors = 20; // For update of sensors
-const unsigned long send_data_time_interval = 10000; // Send data to InfluxDB every 10 seconds
-const unsigned long update_parameters_time_interval = 60000; // Update board parameters every 1 minute. Also use that for sending additional debug info to InfluxDB
-
-unsigned long millisec = 0; // Stores current time
-unsigned long prev_millis = (unsigned long)0xFFFFFFFFFFFFFFF; // some large number so that the loop starts immediately
-unsigned long prev_millis_sent_data = (unsigned long)0xFFFFFFFFFFFFFFF;
-unsigned long prev_millis_updated_parameters = (unsigned long)0xFFFFFFFFFFFFFFF;
-int lastsavedseconds = -1;
 
 // Validity of sensors
 bool tempValid;
@@ -55,17 +29,39 @@ bool bmeValid;
 bool magValid;
 bool imuValid;
 
+InfluxDBConnection DBConn = InfluxDBConnection(INFLUXDBADRESS,INFLUXDBNAME,INFLUXUSERNAME,INFLUXDBPASSWORD);
 
+// Objects for time
+RTCZero rtc;
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
+
+// WiFi and sensor board objects
+WiFiClient wifi_client;
+NetworkFunctions NetworkFunctions_object;
+SensorBoard SensorBoard_obj(NetworkFunctions_object);
+
+// Time intervals
+const unsigned long update_interval_for_sensors = 20; // Time interval in which the sensors are read for calculating the averages
+const unsigned long send_data_time_interval = 10000; // Time interval in which data is sent to InfluxDB
+const unsigned long update_parameters_time_interval = 60000; // Time interval in which board parameters are updated. Same time interval is used for sending additional debug info to InfluxDB
+
+unsigned long millisec = 0; // Stores current time
+unsigned long prev_millis = (unsigned long)0xFFFFFFFFFFFFFFF; // some large number so that the loop starts immediately
+unsigned long prev_millis_sent_data = (unsigned long)0xFFFFFFFFFFFFFFF;
+unsigned long prev_millis_updated_parameters = (unsigned long)0xFFFFFFFFFFFFFFF;
+int lastsavedseconds = -1;
+
+// Watchdog
 int watchdog_countdown = 0;
 bool reset_watchdog = true; // As long as this variable is true, the watchdog will regularly be resetted. If this variable is set to false, the watchdog is not resetted or disabled anymore and by latest after 16 seconds, the Arduino will be completely reset
 
-
 // Sometimes it happens that the connection to InfluxDB is working well but the sensor just deliver stranges value (e.g. humidity = 100% and temperature of -150°C). 
 // Here we define lower and upper limits for some variables. If the value of one sensor does not lie within these expected boundaries, the Arduino will be restarted (with a Watchdog)
-float upper_limit_humidity_before_reset = 95;
-float lower_limit_humidity_before_reset = 1;
-float upper_limit_temperature_before_reset = 40;
-float lower_limit_temperature_before_reset = 0;
+float upper_limit_humidity_before_reset = 90;
+float lower_limit_humidity_before_reset = 5;
+float upper_limit_temperature_before_reset = 35;
+float lower_limit_temperature_before_reset = 5;
 float upper_limit_acceleration_before_reset = 20;
 float lower_limit_acceleration_before_reset = 0.01;
 
@@ -74,8 +70,6 @@ bool arduino_just_resetted = true; // This stores if the Arduino was just resett
 
 bool send_additional_debug_data = true; // Should send more debug info to InfluxDB at next connection?
 
-/*
-*/
 
 
 
@@ -96,20 +90,20 @@ void setup() {
   SensorBoard_obj.update_parameters(); // Update board parameters (such as room and location)
   SensorBoard_obj.check_and_reset_watchdog(); // Reset Watchdog
   
-  // Alarm at 2 AM to set the clock
   // Enable I2C
   Wire.begin();
   // Sync the time with an online service
   timeClient.begin();
   rtc.begin();
   SyncRTC();
+  // Alarm at 2 AM to set the clock
   rtc.setAlarmTime(2,0,0);
   rtc.enableAlarm(RTCZero::Alarm_Match::MATCH_HHMMSS);
   rtc.attachInterrupt(SyncRTC);
   
   SensorBoard_obj.check_and_reset_watchdog(); // Reset Watchdog
   
-  Serial.print("Time: ");
+  Serial.print("Current time: ");
   Serial.print(rtc.getHours());
   Serial.print(":");
   Serial.print(rtc.getMinutes());
@@ -162,8 +156,7 @@ void setup() {
   }
   
   SensorBoard_obj.check_and_reset_watchdog(); // Reset Watchdog
-  /*
-  */
+  
   delay(3000);
   Serial.println("Setup complete\n");
 }
@@ -233,11 +226,7 @@ void loop() {
 
 
   // Writing data to InfluxDB
-  int newseconds = rtc.getSeconds();
-  // Save whenever clock is at 0 in the last digit, only save once
-
   SensorBoard_obj.check_and_reset_watchdog(); // Reset Watchdog
-
 
   if(millisec - prev_millis_updated_parameters >= update_parameters_time_interval){ // Update parameters of the board (such as room and location)
     SensorBoard_obj.check_and_reset_watchdog(); // Reset Watchdog
@@ -247,12 +236,11 @@ void loop() {
     prev_millis_updated_parameters = millisec;
     send_additional_debug_data = true; // Send additional debug info to InfluxDB at the next time (soo
   }
-
-
-    
+  
+  int newseconds = rtc.getSeconds();
   bool rtc_did_not_work_send_data_to_late = millisec - prev_millis_sent_data >= send_data_time_interval + 20000;
   if(
-    (!(newseconds%10) && lastsavedseconds != newseconds)
+    (!(newseconds%10) && lastsavedseconds != newseconds) // Save whenever clock is at 0 in the last digit and only save once
     || rtc_did_not_work_send_data_to_late
   ){
     prev_millis_sent_data = millisec;
@@ -260,7 +248,7 @@ void loop() {
     bool success = false;
     unsigned int counter_trials_connection = 0; // Counts how often it is tried to set up the connection
     Serial.println("\nSending data to database");
-    Serial.print("Software version: ");
+    Serial.print("Software version: "); // Just for debugging: If you connect a sensor to your laptop, you will see what sensor version is running on it
     Serial.print(SOFTWARE_VERSION);
     Serial.println("");
     digitalWrite(13,HIGH);

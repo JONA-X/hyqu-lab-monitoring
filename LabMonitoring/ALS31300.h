@@ -1,4 +1,3 @@
-
 // ALS31300.h
 #ifndef _ALS31300_h
 #define _ALS31300_h

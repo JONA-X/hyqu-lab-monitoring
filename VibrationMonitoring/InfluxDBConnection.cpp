@@ -14,6 +14,9 @@ InfluxDBConnection::InfluxDBConnection(String adress, String dbName, String acce
     }
 
 bool InfluxDBConnection::writeToDataBase(double MaxAcc, double AvgAcc){
+    String room = ROOM;
+    String location = LOCATION;
+    
     //change to connectSSL if necessary
     if(client.connect(adress.c_str(),port)){
         //clones a HTTP post request
@@ -23,7 +26,7 @@ bool InfluxDBConnection::writeToDataBase(double MaxAcc, double AvgAcc){
         client.println("User-Agent: Arduino/1.0"); // "Browser"
         client.print("Content-Length: ");
         String sensorname = SENSORNAME;
-        String DataString =  "Acceleration,sensor=" + sensorname + " Max=" + String(MaxAcc) + ",Avg=" + String(AvgAcc);
+        String DataString =  "Acceleration,sensor=" + sensorname + ",room=" + room + ",location=" + location + " Max=" + String(MaxAcc) + ",Avg=" + String(AvgAcc);
         client.println(DataString.length());
         Serial.println("");
         Serial.println(DataString);

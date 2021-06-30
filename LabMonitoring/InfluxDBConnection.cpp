@@ -18,7 +18,7 @@ bool InfluxDBConnection::writeToDataBase(SensorBoard &SensorBoard_obj, bool ardu
         //clones a HTTP post request
         client.println(dataBaseString);
         client.println("Host: " + adress + ":" + port);
-        client.println("Connection: close"); //connection closes after request finished
+        client.println("Connection: close"); // Connection closes after request finished
         client.println("User-Agent: Arduino/1.0"); // "Browser"
         client.print("Content-Length: ");
         String DataString = SensorBoard_obj.getMeasurements("\n", arduino_just_resetted, rtc_did_not_work_send_data_to_late, send_additional_debug_data);

@@ -172,16 +172,19 @@ void SensorBoard::LogMagField(float x,float y, float z){
 }
 
 
-//Gets measurement and resets the class
+// Gets measurement and resets the class
 String SensorBoard::getMeasurements(String separator, bool arduino_just_resetted = false, bool rtc_did_not_work_send_data_to_late = false, bool send_additional_debug_data = false){
     String sensorname = SENSORNAME;
-    String retstring =  "Temperature,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\",sensorPCB=MCP9808 value=" + String(Temperature) + separator +
-                        "Temperature,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\",sensorPCB=BME280 value=" + String(Temperature2) + separator + 
-                        "Pressure,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\" value=" + String(Pressure) + separator +
-                        "Humidity,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\" value=" + String(Humidity) + separator +
-                        "Acceleration,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\" Max=" + String(MaxAcc) + ",Avg=" + String(AvgAcc) + separator +
-                        "MagField,sensor=" + sensorname  + ",room=\"" + room + "\",location=\"" + location + "\" abs=" + String(MaxMagAbsField) + ",x_max=" + String(MaxMagField[0]) + ",y_max=" + String(MaxMagField[1])+ ",z_max=" + String(MaxMagField[2]) + 
+    String retstring =  "Temperature,sensor=" + sensorname  + ",room=" + room + ",location=" + location + ",sensorPCB=MCP9808 value=" + String(Temperature) + separator +
+                        "Temperature,sensor=" + sensorname  + ",room=" + room + ",location=" + location + ",sensorPCB=BME280 value=" + String(Temperature2) + separator + 
+                        "Pressure,sensor=" + sensorname  + ",room=" + room + ",location=" + location + " value=" + String(Pressure) + separator +
+                        "Humidity,sensor=" + sensorname  + ",room=" + room + ",location=" + location + " value=" + String(Humidity) + separator +
+                        "Acceleration,sensor=" + sensorname  + ",room=" + room + ",location=" + location + " Max=" + String(MaxAcc) + ",Avg=" + String(AvgAcc) + separator +
+                        "MagField,sensor=" + sensorname  + ",room=" + room + ",location=" + location + " abs=" + String(MaxMagAbsField) + ",x_max=" + String(MaxMagField[0]) + ",y_max=" + String(MaxMagField[1])+ ",z_max=" + String(MaxMagField[2]) + 
                         ",x_avg=" + String(AvgMagField[0]) + ",y_avg=" + String(AvgMagField[1])+ ",z_avg=" + String(AvgMagField[2]);
+                        
+    retstring += separator + "NumberDatapointsAvgTemp,sensor=" + sensorname + ",room=" + room + ",location=" + location + " value=" + String(TDataPoints) + "";
+    
     if(arduino_just_resetted){
       retstring += separator + "Reset,sensor=" + sensorname + " value=1";
     }
@@ -189,11 +192,12 @@ String SensorBoard::getMeasurements(String separator, bool arduino_just_resetted
       retstring += separator + "RTCNotWorking,sensor=" + sensorname + " value=1";
     }
     if(send_additional_debug_data){
-      retstring += separator + "SoftwareVersion,sensor=" + sensorname + " value=\"" + software_version + "\"";
+      retstring += separator + "SoftwareVersion,sensor=" + sensorname + ",room=" + room + ",location=" + location + " value=\"" + software_version + "\"";
     }
     return retstring;
 }
 
+// Reset measurement variables
 void SensorBoard::reset_data(){
     Temperature = 0;
     TDataPoints = 0;
